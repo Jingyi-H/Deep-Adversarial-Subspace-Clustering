@@ -1,11 +1,29 @@
 import tensorflow as tf
-from tensorflow.keras import layers, Sequential, Model, losses
+from tensorflow.keras import layers, Sequential, Model, Input
+from tensorflow.keras import backend as K
+from tensorflow.python.keras.layers import Layer
 from sklearn.cluster import SpectralClustering
 import numpy as np
 from munkres import Munkres
-import scipy.io as sio
 from scipy.sparse.linalg import svds
 from sklearn.preprocessing import normalize
+
+class Self_Expressive(Layer):
+	def __init__(self, batch_size, **kwargs):
+		super(Self_Expressive, self).__init__(**kwargs)
+		self.batch_size = batch_size
+
+	def build(self, input_shape):
+		# 为该层创建一个可训练的权重
+		self.theta = self.add_weight(name='Theta',
+									  shape=(1, self.batch_size, self.batch_size),
+									  initializer='uniform',
+									  trainable=True)
+		super(Self_Expressive, self).build(input_shape)  # 一定要在最后调用它
+
+	def call(self, x):
+		return K.dot(self.theta, x)
+
 
 class ConvAE(Model):
 	def __init__(self, input_shape=[32,32,1], batch_size=None, learning_rate=1e-3, num_class=20):
@@ -25,8 +43,8 @@ class ConvAE(Model):
 						  kernel_initializer = tf.keras.initializers.GlorotNormal()),
 			layers.Reshape((-1, 3840))
 		])
-		self.theta = tf.Variable(1.0e-8 * tf.ones([1, self.batch_size, self.batch_size],tf.float32), name='Coef')
-		self.self_expressive = layers.Dot(axes=[1, 2])
+
+		self.self_expressive = Self_Expressive(self.batch_size, input_shape=(batch_size, batch_size))
 		self.z_conv = None
 		self.z_se = None
 		self.decoder = Sequential([
@@ -40,18 +58,20 @@ class ConvAE(Model):
 		])
 
 	# def build(self):
-	# 	self._layers = [
-	# 		self.encoder,
-	#
-    # 	]
-	# 	super(ConvAE, self).build(self.input_shape)
+	# 	inputs = [self.batch_size] + self.input_shape
+	# 	inputs = tuple(inputs)
+	# 	self.encoder.build(inputs)
+	# 	self.self_expressive.build((-1, 3840))
+	# 	self.decoder.build((-1, 3840))
 
 	def call(self, x):
 		z = self.encoder(x)
-		z = tf.reshape(z, [1, self.batch_size, 3840])	# 整个batch一起训练
+		z = tf.reshape(z, [self.batch_size, 3840])	# 整个batch一起训练
 		self.z_conv = z
-		z = self.self_expressive([z, self.theta])
+		print("z_conv:", z.shape)
+		z = self.self_expressive(z)
 		self.z_se = z									# self_expressive_z = theta*z
+		print("z_se:", z.shape)
 		z = tf.reshape(z, [self.batch_size, 1, 3840])
 		x = self.decoder(z)
 
