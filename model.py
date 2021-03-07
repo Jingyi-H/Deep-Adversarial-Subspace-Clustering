@@ -68,10 +68,9 @@ class ConvAE(Model):
 		z = self.encoder(x)
 		z = tf.reshape(z, [self.batch_size, 3840])	# 整个batch一起训练
 		self.z_conv = z
-		print("z_conv:", z.shape)
 		z = self.self_expressive(z)
 		self.z_se = z									# self_expressive_z = theta*z
-		print("z_se:", z.shape)
+		# print("z_se:", z.shape)
 		z = tf.reshape(z, [self.batch_size, 1, 3840])
 		x = self.decoder(z)
 
