@@ -1,12 +1,13 @@
 import numpy as np
 import tensorflow as tf
 import scipy.io as sio
+import os
 import loss
 from model import ConvAE
 
 
 
-def train_G(train_data, batch_size=72, input_shape=[32,32,1], epoch_num=10):
+def train_ConvAE(train_data, batch_size=72, input_shape=[32,32,1], epoch_num=10):
     '''
 
     :param train_data: tf.data.Dataset
@@ -44,17 +45,37 @@ def train_G(train_data, batch_size=72, input_shape=[32,32,1], epoch_num=10):
             # if (batch+1)%10 == 0:
             #     print("epoch[{}]: batch-{} loss={}".format(str(epoch+1), str(batch+1), str(float(rec_loss))))
     print(conv_ae.layers[1].get_weights()[0])
+    _z_conv = conv_ae.z_se
+    _theta = conv_ae.layers[1].get_weights()[0]
 
-coil20 = sio.loadmat('data/COIL20.mat')
-img = coil20['fea']
-label = coil20['gnd']
-img = np.reshape(img,(img.shape[0],32,32,1))
+    return _z_conv, _theta
 
-# train_db = tf.convert_to_tensor(img, dtype=tf.float32)
+def load_data(path='data/COIL20.mat'):
+    try:
+        print("loading data from {}/{}...".format(os.getcwd(), path))
+        coil20 = sio.loadmat(path)
+        img = coil20['fea']
+        label = coil20['gnd']
+        img = np.reshape(img,(img.shape[0],32,32,1))
+        return img, label
+    except Exception as e:
+        print(e)
+        return None
+
+def shuffle(x, y):
+    index = np.arange(x.shape[0])
+    np.random.shuffle(index)
+    x = x[index, :, :, :]
+    y = y[index, :]
+
+    return x, y
+
+img, label = load_data()
+img, label = shuffle(img, label)
 train_db = tf.data.Dataset.from_tensor_slices((img, img))
 # print(type(train_db))
 # train_db = train_db.batch(72)
 
 # print(train_db)
 # print(list(train_db.as_numpy_iterator()))
-train_G(train_db, epoch_num=10, batch_size=1440)
+# z, theta = train_ConvAE(train_db, epoch_num=10, batch_size=1440)
