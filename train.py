@@ -1,13 +1,15 @@
 import numpy as np
 import tensorflow as tf
-import scipy.io as sio
 import os
+import scipy.io as sio
+from sklearn.cluster import SpectralClustering
 import loss
 from model import ConvAE
+import utils
 
 
 
-def train_ConvAE(train_data, batch_size=72, input_shape=[32,32,1], epoch_num=10):
+def train_ConvAE(train_data, batch_size=72, input_shape=[32,32,1], epoch_num=10, save_dir='autoencoder'):
     '''
 
     :param train_data: tf.data.Dataset
@@ -44,10 +46,11 @@ def train_ConvAE(train_data, batch_size=72, input_shape=[32,32,1], epoch_num=10)
 
             # if (batch+1)%10 == 0:
             #     print("epoch[{}]: batch-{} loss={}".format(str(epoch+1), str(batch+1), str(float(rec_loss))))
-    print(conv_ae.layers[1].get_weights()[0])
+    # print(conv_ae.layers[1].get_weights()[0])
     _z_conv = conv_ae.z_se
     _theta = conv_ae.layers[1].get_weights()[0]
 
+    conv_ae.save_weights('logs/conv_ae_weights')
     return _z_conv, _theta
 
 def load_data(path='data/COIL20.mat'):
@@ -79,3 +82,23 @@ train_db = tf.data.Dataset.from_tensor_slices((img, img))
 # print(train_db)
 # print(list(train_db.as_numpy_iterator()))
 # z, theta = train_ConvAE(train_db, epoch_num=10, batch_size=1440)
+conv_ae = ConvAE(batch_size=1440)
+conv_ae.build(input_shape=(1440,32,32,1))
+conv_ae.load_weights('logs/conv_ae_weights')
+# print(conv_ae.summary())
+# ______test_______
+theta = conv_ae.layers[1].get_weights()[0]
+theta = np.reshape(theta, [1440, 1440])
+theta_T = np.transpose(theta)
+affinity = theta + theta_T
+affinity = np.abs(affinity)
+sc = SpectralClustering(20, affinity='precomputed', n_init=100, assign_labels='discretize')
+label_pred = sc.fit_predict(affinity)
+
+label = label.astype(int)
+label = np.reshape(label, [-1])
+print(label[:10], label.dtype)
+label_map = utils.best_map(label, label_pred)
+print(label.dtype)
+label_map = label_map.astype(int)
+print(label_map[:10])
