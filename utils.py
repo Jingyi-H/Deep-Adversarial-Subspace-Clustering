@@ -26,4 +26,18 @@ def best_map(L1, L2):
 
 	return newL2
 
-def 
+def generate_noise(m, d):
+	'''
+
+	:param m:
+	:param d:
+	:return: alpha - coefficience matrix of representation z
+	'''
+
+	alpha = np.random.random(m)
+	alpha = np.tile(alpha, d)
+
+	return alpha
+
+def random_select(labels):
+	pass
