@@ -26,18 +26,22 @@ def best_map(L1, L2):
 
 	return newL2
 
-def generate_noise(m, d):
+def generate_data(z_k, m_k, m_gen):
 	'''
-
-	:param m:
-	:param d:
+	generate noise in uniform distribution
+	:param m: 生成m个样本
 	:return: alpha - coefficience matrix of representation z
 	'''
+	z_k = z_k.T
+	gen = np.array([])
+	for i in range(m_gen):
+		alpha = np.random.random(m_k)
+		_z = z_k.dot(alpha)
+		print(_z.shape)
+		_z = _z.T
+		gen = np.hstack([gen, _z])
 
-	alpha = np.random.random(m)
-	alpha = np.tile(alpha, d)
-
-	return alpha
+	return gen
 
 def random_select(labels):
 	pass
