@@ -4,9 +4,10 @@ from tensorflow.keras import backend as K
 from tensorflow.python.keras.layers import Layer
 from sklearn.cluster import SpectralClustering
 import numpy as np
-from munkres import Munkres
 from scipy.sparse.linalg import svds
 from sklearn.preprocessing import normalize
+
+import utils
 
 class Self_Expressive(Layer):
 	def __init__(self, batch_size, **kwargs):
@@ -23,6 +24,22 @@ class Self_Expressive(Layer):
 
 	def call(self, x):
 		return K.dot(self.theta, x)
+
+# class Basis_matrix(Layer):
+# 	def __init__(self, batch_size, **kwargs):
+# 		super(Self_Expressive, self).__init__(**kwargs)
+# 		self.batch_size = batch_size
+#
+# 	def build(self, input_shape):
+# 		# 为该层创建一个可训练的权重
+# 		self.u = self.add_weight(name='U',
+# 									  shape=(1, self.batch_size, self.batch_size),
+# 									  initializer='uniform',
+# 									  trainable=True)
+# 		super(Self_Expressive, self).build(input_shape)  # 一定要在最后调用它
+#
+# 	def call(self, x):
+# 		return K.dot(self.theta, x)
 
 
 class ConvAE(Model):
@@ -68,6 +85,7 @@ class ConvAE(Model):
 		z = self.encoder(x)
 		z = tf.reshape(z, [self.batch_size, 3840])	# 整个batch一起训练
 		self.z_conv = z
+		# print(z)
 		z = self.self_expressive(z)
 		self.z_se = z									# self_expressive_z = theta*z
 		# print("z_se:", z.shape)
@@ -78,30 +96,49 @@ class ConvAE(Model):
 
 
 class DASC(object):
-	def __init__(self, input_img, input_shape=[32,32,1], batch_size=None, kclusters=20):
+	def __init__(self, input_shape, batch_size=1440, kcluster=20):
 		super(DASC, self).__init__()
-		self.img = input_img
-		self.input_shape = input_shape
-		self.batch_size = batch_size
-		self.kclusters = kclusters
+		self.kcluster = kcluster
+		self.conv_ae = ConvAE(batch_size=batch_size, input_shape=input_shape)
+		self.conv_ae.build(input_shape=input_shape)
 
 	def forward(self, x):
 		pass
 
 
-	def G(self, ae):
-		# ae = ConvAE(batch_size=self.batch_size)
-		# ae.compile(optimizer='adam', loss=losses.MeanSquaredError())
-		# ae.fit(self.img, self.img, epochs=10, shuffle=True, batch_size=self.batch_size, validation_split=0.5)
-		theta = tf.reshape(ae.theta, [self.batch_size, self.batch_size]).numpy()
+	def G(self, x, theta, z_conv, real_label, alpha=0.8):
+		'''
+		Cluster Generator
+		:param theta: 	Self-Expressive Coefficient Matrix
+		:param z_conv:	Representation
+		:return:		Generated vectors
+		'''
+		x_reconst = self.conv_ae(x)
+		z_conv = self.conv_ae.z_conv
+		z_se = self.conv_ae.z_se
+		theta = self.conv_ae.layers[1].get_weights()[0]
+
 		affinity = 0.5*(theta + theta.T)
 
 		# 构造相似度矩阵，自表达层的参数即kernel的权重
 		affinity = np.abs(affinity)
+		# Spectral Clustering(N-Cut)
 		sc = SpectralClustering(self.kclusters, affinity='precomputed', n_init=100, assign_labels='discretize')
-		sc.fit_predict(affinity)
+		label_pred = sc.fit_predict(affinity)
 
-
+		cidx = []
+		clusters = []
+		# generate fake data
+		for k in range(self.kcluster):
+			idx = np.where(label_pred == k)[0].tolist()
+			cidx.append(idx)
+			clusters.append(z_conv[idx][:])
+			m_k = len(idx)			# num of samples in cluster Ck
+			m_gen = m_k * alpha		# num of generated samples
+			# 生成数据
+			z_k = utils.generate_data(z_conv, m_k, m_gen)
+			# 生成标签
+			l = np.tile(np.array([k+1]), m_gen).reshape(-1, 1)
 
 	def D(self):
 		pass
