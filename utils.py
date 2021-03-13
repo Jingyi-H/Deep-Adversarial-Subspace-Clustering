@@ -33,15 +33,21 @@ def generate_data(z_k, m_k, m_gen):
 	:return: alpha - coefficience matrix of representation z
 	'''
 	z_k = z_k.T
-	gen = np.array([])
+
 	for i in range(m_gen):
 		alpha = np.random.random(m_k)
 		_z = z_k.dot(alpha)
-		print(_z.shape)
-		_z = _z.T
-		gen = np.hstack([gen, _z])
+		_z = _z.reshape(1,-1)
+		if i == 0:
+			gen = _z
+		else:
+			gen = np.vstack([gen, _z])
+	print(gen.shape)
 
 	return gen
 
 def random_select(labels):
+	pass
+
+def qr_decomp(matrix):
 	pass
