@@ -2,8 +2,10 @@ import tensorflow as tf
 from tensorflow.keras import backend as K
 
 
-def projection_residual(z):
-	pass
+def projection_residual(z, U):
+	loss = tf.norm(z - tf.dot(tf.dot(U, U.T), z))
+
+	return loss
 
 def reconst_loss(x_true, x_reconst):
 	return tf.reduce_mean(tf.square(x_true - x_reconst))
@@ -17,4 +19,8 @@ def ae_loss(x_true, x_reconst, z_conv, z_se, theta, lambda1=0.5, lambda2=15, lam
 	penalty = tf.cast(tf.matmul(norm, norm), dtype=tf.float64)
 	# print(reconst_loss.dtype, self_expr_loss.dtype, penalty.dtype)
 	loss = lambda1 * reconst_loss + lambda2 * self_expr_loss + lambda3 * penalty
+
 	return [loss, reconst_loss, self_expr_loss, penalty]
+
+def loss_D():
+	pass
