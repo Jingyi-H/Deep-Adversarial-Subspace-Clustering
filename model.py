@@ -129,6 +129,7 @@ class DASC(object):
 		'''
 		x_reconst = self.conv_ae(x)
 		z_conv = self.conv_ae.z_conv
+		print(z_conv.shape)
 		z_se = self.conv_ae.z_se
 		theta = self.conv_ae.layers[1].get_weights()[0]
 
@@ -148,12 +149,12 @@ class DASC(object):
 		for k in range(self.kcluster):
 			idx = np.where(label_pred == k)[0].tolist()
 			cidx.append(idx)
-			basis = z_conv[idx][:]
-			clusters.append(z_conv[idx][:])
+			basis = z_conv[idx][:].T
+			clusters.append(basis)
 			m_k = len(idx)						# num of samples in cluster Ck
 			m_gen = math.floor(m_k * alpha)		# num of generated samples
 			# 生成数据
-			z_k = utils.generate_data(z_conv, m_k, m_gen)
+			z_k = utils.generate_data(basis, m_k, m_gen)
 			# 生成标签
 			l = np.tile(np.array([k]), m_gen).reshape(-1, 1)
 			gen_data.append(z_k)
@@ -170,11 +171,11 @@ class DASC(object):
 		_U = []		# Ui 列表
 		_m = []		# Ci的样本数 (with fake samples)
 		for k in self.kcluster:
-			_z = np.vstack([clusters[k], Z[k]])
+			_z = np.hstack([clusters[k], Z[k]])
 			U, R = qr(_z, mode='full')
 			U = tf.Variable(U)
 			print("U:", U)
-			Lr_z = loss.projection_residual(_z, U)
+			# Lr_z = loss.projection_residual(_z, U)
 			_m.append(_z.shape[0])
 			_U.append(U)
 
