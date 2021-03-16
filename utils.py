@@ -37,11 +37,11 @@ def generate_data(z_k, m_k, m_gen):
 	for i in range(m_gen):
 		alpha = np.random.random(m_k)
 		_z = z_k.dot(alpha)
-		_z = _z.reshape(1,-1)
+		_z = _z.reshape(-1, 1)
 		if i == 0:
 			gen = _z
 		else:
-			gen = np.vstack([gen, _z])
+			gen = np.hstack([gen, _z])
 	print(gen.shape)
 
 	return gen
