@@ -23,11 +23,21 @@ def ae_loss(x_true, x_reconst, z_conv, z_se, theta, lambda1=0.5, lambda2=15, lam
 
 	return [loss, reconst_loss, self_expr_loss, penalty]
 
-def loss_D(z, _z, _U, kcluster, _m, epsilon=0):
+def L_D(z, _z, _U, kcluster, epsilon=0):
 	loss = 0
 	for k in range(kcluster):
 		m = z[k].shape[1]			# z[k] 列向量构成的矩阵，m为向量数即样本数
 		loss = loss + projection_residual(z[k], _U[k])/m + max(epsilon - projection_residual(_z[k], _U[k]), 0)/m
+
+	loss = loss/kcluster
+
+	return loss
+
+def L_a(_z, _U, kcluster):
+	loss = 0
+	for k in range(kcluster):
+		m = z[k].shape[1]			# z[k] 列向量构成的矩阵，m为向量数即样本数
+		loss = loss + projection_residual(_z[k], _U[k])/m
 
 	loss = loss/kcluster
 
