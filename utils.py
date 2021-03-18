@@ -36,11 +36,12 @@ def generate_data(z_k, m_k, m_gen):
 	# z_k = z_k.T
 
 	for i in range(m_gen):
-		alpha = np.random.random(m_k)
+		alpha = np.random.random(m_k).reshape(-1, 1)
 		alpha = tf.cast(alpha, dtype='float64')
-		_z = tf.matmul(alpha, z_k)
+		z_k = tf.cast(z_k, dtype='float64')
+		_z = tf.matmul(z_k, alpha)
 		# _z = z_k.dot(alpha)
-		_z = _z.reshape(-1, 1)
+		# _z = tf.reshape(-1, 1)
 		if i == 0:
 			gen = _z
 		else:
