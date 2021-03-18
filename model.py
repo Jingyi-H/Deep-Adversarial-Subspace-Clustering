@@ -30,7 +30,7 @@ class Self_Expressive(Layer):
 		return K.dot(self.theta, x)
 
 class ConvAE(Model):
-	def __init__(self, input_shape=[32,32,1], batch_size=None, learning_rate=1e-3, num_class=20):
+	def __init__(self, input_shape=(1440, 32,32,1), batch_size=None, learning_rate=1e-3, num_class=20):
 		super(ConvAE, self).__init__()
 
 		# self.input_shape = input_shape # [32, 32, 1] i.e. 32x32x1 单通道图像
@@ -41,7 +41,7 @@ class ConvAE(Model):
 		self.encoder = Sequential([
 			layers.Conv2D(15, kernel_size=3,
 						  activation='relu',
-						  input_shape=input_shape,
+						  input_shape=input_shape[1:],
 						  strides=2,
 						  padding='SAME',
 						  kernel_initializer = tf.keras.initializers.GlorotNormal()),
@@ -88,8 +88,8 @@ class DASC(object):
 		self.kcluster = kcluster
 		self.conv_ae = ConvAE(batch_size=batch_size, input_shape=input_shape)
 		self.conv_ae.build(input_shape=input_shape)
-		self._U = []
-		self._m = []
+		self._U = []	# 每个cluster对应的U矩阵
+		self._m = []	# 每个cluster的样本数，包含真假样本
 
 	def call(self, x):
 		pass
@@ -103,7 +103,7 @@ class DASC(object):
 
 		variables = self.conv_ae.trainable_variables
 		optimizer = tf.optimizers.Adam(lr=2e-4)
-
+		print(self.conv_ae.summary())
 		for epoch in range(pre_train_epoch):
 			for (batch, (x_batch, x_r_batch)) in enumerate(train_data):
 				with tf.GradientTape() as tape:
@@ -120,7 +120,7 @@ class DASC(object):
 				str(epoch+1), str(float(rec_loss)), str(reconst_loss.numpy()), str(self_expr_loss.numpy()), str(penalty.numpy().ravel()[0])))
 
 
-	def G(self, x, theta, z_conv, real_label, alpha=0.8):
+	def G(self, x, alpha=0.8):
 		'''
 		Cluster Generator
 		:param theta: 	Self-Expressive Coefficient Matrix
@@ -132,7 +132,7 @@ class DASC(object):
 		print(z_conv.shape)
 		z_se = self.conv_ae.z_se
 		theta = self.conv_ae.layers[1].get_weights()[0]
-
+		theta = np.reshape(theta, [1440, 1440])
 		affinity = 0.5*(theta + theta.T)
 
 		# 构造相似度矩阵，自表达层的参数即kernel的权重
@@ -149,7 +149,8 @@ class DASC(object):
 		for k in range(self.kcluster):
 			idx = np.where(label_pred == k)[0].tolist()
 			cidx.append(idx)
-			basis = z_conv[idx][:].T
+			basis = tf.gather(z_conv, axis=0, indices=idx)
+			basis = tf.transpose(basis)
 			clusters.append(basis)
 			m_k = len(idx)						# num of samples in cluster Ck
 			m_gen = math.floor(m_k * alpha)		# num of generated samples
@@ -168,6 +169,12 @@ class DASC(object):
 		return clusters, gen_data
 
 	def D(self, clusters, Z):
+		'''
+
+		:param clusters: G中分出的聚类
+		:param Z: fake samples generated from G
+		:return:
+		'''
 		_U = []		# Ui 列表
 		_m = []		# Ci的样本数 (with fake samples)
 		for k in self.kcluster:
