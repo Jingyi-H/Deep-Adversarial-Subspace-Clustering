@@ -1,4 +1,5 @@
 import numpy as np
+import tensorflow as tf
 from munkres import Munkres
 
 def best_map(L1, L2):
@@ -32,11 +33,13 @@ def generate_data(z_k, m_k, m_gen):
 	:param m: 生成m个样本
 	:return: alpha - coefficience matrix of representation z
 	'''
-	z_k = z_k.T
+	# z_k = z_k.T
 
 	for i in range(m_gen):
 		alpha = np.random.random(m_k)
-		_z = z_k.dot(alpha)
+		alpha = tf.cast(alpha, dtype='float64')
+		_z = tf.matmul(alpha, z_k)
+		# _z = z_k.dot(alpha)
 		_z = _z.reshape(-1, 1)
 		if i == 0:
 			gen = _z
