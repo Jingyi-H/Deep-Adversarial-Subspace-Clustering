@@ -3,7 +3,11 @@ from tensorflow.keras import backend as K
 
 
 def projection_residual(z, U):
-	loss = tf.norm(z - tf.dot(tf.dot(U, U.T), z))
+	z = tf.cast(z, dtype='float64')
+	U = tf.cast(z, dtype='float64')
+	loss = tf.norm(z - tf.matmul(tf.matmul(U, tf.transpose(U)), z))
+	loss = tf.reshape(loss, [1, 1])
+
 	loss = tf.cast(tf.matmul(loss, loss), dtype=tf.float64)
 
 	return loss
