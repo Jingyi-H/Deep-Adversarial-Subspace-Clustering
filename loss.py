@@ -2,12 +2,11 @@ import tensorflow as tf
 from tensorflow.keras import backend as K
 
 
-def projection_residual(z, U):
+def projection_residual(z, proj):
 	z = tf.cast(z, dtype='float64')
-	U = tf.cast(z, dtype='float64')
-	loss = tf.norm(z - tf.matmul(tf.matmul(U, tf.transpose(U)), z))
-	loss = tf.reshape(loss, [1, 1])
-
+	proj = tf.cast(proj, dtype='float64')
+	loss = tf.norm(z - proj)
+	# loss = tf.reshape(loss, [1, 1])
 	loss = tf.cast(tf.matmul(loss, loss), dtype=tf.float64)
 
 	return loss
@@ -27,11 +26,11 @@ def ae_loss(x_true, x_reconst, z_conv, z_se, theta, lambda1=0.5, lambda2=15, lam
 
 	return [loss, reconst_loss, self_expr_loss, penalty]
 
-def L_D(z, _z, _U, kcluster, epsilon=0):
+def L_D(z, proj, kcluster, epsilon=0):
 	loss = 0
 	for k in range(kcluster):
 		m = z[k].shape[1]			# z[k] 列向量构成的矩阵，m为向量数即样本数
-		loss = loss + projection_residual(z[k], _U[k])/m + max(epsilon - projection_residual(_z[k], _U[k]), 0)/m
+		loss = loss + projection_residual(z[k], proj[k])/m + max(epsilon - projection_residual(_z[k], proj[k]), 0)/m
 
 	loss = loss/kcluster
 
