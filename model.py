@@ -2,6 +2,7 @@ import tensorflow as tf
 from tensorflow.keras import layers, Sequential, Model, Input
 from tensorflow.keras import backend as K
 from tensorflow.python.keras.layers import Layer
+from tensorflow.python.keras.initializers import Initializer
 from sklearn.cluster import SpectralClustering
 import numpy as np
 import math
@@ -28,6 +29,29 @@ class Self_Expressive(Layer):
 
 	def call(self, x):
 		return K.dot(self.theta, x)
+
+class U_initializer(Initializer):
+	def __init__(self, matrix):
+		self.matrix = matrix
+
+	def __call__(self, shape, dtype=None):
+		return K.variable(value=self.matrix, dtype=dtype)
+
+class Projection(Layer):
+	def __init__(self, matrix, **kwargs):
+		super(Projection, self).__init__(**kwargs)
+		self.matrix = matrix
+
+	def build(self, input_shape):
+		# 为该层创建一个可训练的权重
+		self.U = self.add_weight(name="_u",
+									  shape=input_shape,
+									  initializer=U_initializer(self.matrix),
+									  trainable=True)
+		super(Projection, self).build(input_shape)  # 一定要在最后调用它
+
+	def call(self, z):
+		return K.dot(K.dot(self.U, K.transpose(self.U)), z)
 
 class ConvAE(Model):
 	def __init__(self, input_shape=(1440, 32,32,1), batch_size=None, learning_rate=1e-3, num_class=20):
@@ -129,7 +153,7 @@ class DASC(object):
 		'''
 		x_reconst = self.conv_ae(x)
 		z_conv = self.conv_ae.z_conv
-		print(z_conv.shape)
+		# print(z_conv.shape)
 		z_se = self.conv_ae.z_se
 		theta = self.conv_ae.layers[1].get_weights()[0]
 		theta = np.reshape(theta, [1440, 1440])
@@ -177,15 +201,20 @@ class DASC(object):
 		'''
 		_U = []		# Ui 列表
 		_m = []		# Ci的样本数 (with fake samples)
-		for k in self.kcluster:
+		for k in range(self.kcluster):
 			_z = np.hstack([clusters[k], Z[k]])
 			U, R = qr(_z, mode='full')
-			U = tf.Variable(U)
-			print("U:", U)
+			# U =
+			# print("U:", U)
 			# Lr_z = loss.projection_residual(_z, U)
 			_m.append(_z.shape[0])
-			_U.append(U)
+			u = Projection(U, input_shape=U.shape, name="U{}".format(str(k)))
+			_U.append(u)
 
 		self._U = _U
 		self._m = _m
+
+	def forward(self, real_z, fake_z):
+		pass
+
 
