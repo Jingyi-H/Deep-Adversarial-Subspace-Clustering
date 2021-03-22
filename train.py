@@ -25,10 +25,12 @@ def train(train_data, batch_size=72, input_shape=[32,32,1], epoch_num=10, k=20, 
         for (batch, (x_batch, x_r_batch)) in enumerate(train_data):
             cluster, generated = dasc.G(x_batch)
             dasc.D(cluster, generated)
-            d_var = dasc._U
+            d_var = [dasc._U[i].trainable_variables[0] for i in range(k)]
             for i in range(d_iter_num):
                 with tf.GradientTape() as tape:
-                    l_d = loss.L_D(cluster, generated, d_var, k)
+                    proj = dasc.forward(cluster, generated)
+                    z = dasc._z
+                    l_d = loss.L_D(z, proj, k)
                     print("L_d: {}".format(str(l_d)))
                 grads = tape.gradient(l_d, d_var)
                 optimizer.apply_gradients(zip(grads, d_var))

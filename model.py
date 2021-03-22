@@ -13,6 +13,7 @@ from scipy.linalg import qr
 from DASC import utils
 from DASC import loss
 
+tf.keras.backend.set_floatx('float64')
 
 class Self_Expressive(Layer):
 	def __init__(self, batch_size, **kwargs):
@@ -45,12 +46,13 @@ class Projection(Layer):
 	def build(self, input_shape):
 		# 为该层创建一个可训练的权重
 		self.U = self.add_weight(name="_u",
-									  shape=input_shape,
+									  shape=self.matrix.shape,
 									  initializer=U_initializer(self.matrix),
 									  trainable=True)
 		super(Projection, self).build(input_shape)  # 一定要在最后调用它
 
 	def call(self, z):
+		print("call Projection")
 		return K.dot(K.dot(self.U, K.transpose(self.U)), z)
 
 class ConvAE(Model):
@@ -114,6 +116,7 @@ class DASC(object):
 		self.conv_ae.build(input_shape=input_shape)
 		self._U = []	# 每个cluster对应的U矩阵
 		self._m = []	# 每个cluster的样本数，包含真假样本
+		self._z = []
 
 	def call(self, x):
 		pass
@@ -201,20 +204,31 @@ class DASC(object):
 		'''
 		_U = []		# Ui 列表
 		_m = []		# Ci的样本数 (with fake samples)
+		_z = []
 		for k in range(self.kcluster):
-			_z = np.hstack([clusters[k], Z[k]])
-			U, R = qr(_z, mode='full')
+			z = np.hstack([clusters[k], Z[k]])
+			U, R = qr(z, mode='full')
 			# U =
 			# print("U:", U)
 			# Lr_z = loss.projection_residual(_z, U)
-			_m.append(_z.shape[0])
-			u = Projection(U, input_shape=U.shape, name="U{}".format(str(k)))
+			_m.append(z.shape[0])
+			# print(U.shape)
+			u = Projection(U, input_shape=z.shape, name="U{}".format(str(k)))
+			u.build(z.shape)
 			_U.append(u)
+			_z.append(z)
 
 		self._U = _U
 		self._m = _m
+		self._z = _z
 
 	def forward(self, real_z, fake_z):
-		pass
+		proj = []
+		for k in range(self.kcluster):
+			z = np.hstack([real_z[k], fake_z[k]])
+			p = self._U[k](z)
+			proj.append(p)
+
+		return proj
 
 

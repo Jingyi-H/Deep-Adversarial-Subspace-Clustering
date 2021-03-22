@@ -3,11 +3,12 @@ from tensorflow.keras import backend as K
 
 
 def projection_residual(z, proj):
-	z = tf.cast(z, dtype='float64')
-	proj = tf.cast(proj, dtype='float64')
-	loss = tf.norm(z - proj)
+	# z = tf.cast(z, dtype='float64')
+	# proj = tf.cast(proj, dtype='float64')
+	loss = tf.norm(z - proj, keepdims=True)
 	# loss = tf.reshape(loss, [1, 1])
-	loss = tf.cast(tf.matmul(loss, loss), dtype=tf.float64)
+	loss = tf.matmul(loss, loss)
+	# loss = tf.cast(tf.matmul(loss, loss), dtype=tf.float64)
 
 	return loss
 
@@ -30,7 +31,7 @@ def L_D(z, proj, kcluster, epsilon=0):
 	loss = 0
 	for k in range(kcluster):
 		m = z[k].shape[1]			# z[k] 列向量构成的矩阵，m为向量数即样本数
-		loss = loss + projection_residual(z[k], proj[k])/m + max(epsilon - projection_residual(_z[k], proj[k]), 0)/m
+		loss = loss + projection_residual(z[k], proj[k])/m + max(epsilon - projection_residual(z[k], proj[k]), 0)/m
 
 	loss = loss/kcluster
 
