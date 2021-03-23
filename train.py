@@ -23,16 +23,18 @@ def train(train_data, batch_size=72, input_shape=[32,32,1], epoch_num=10, k=20, 
 
     for epoch in range(epoch_num):
         for (batch, (x_batch, x_r_batch)) in enumerate(train_data):
-            cluster, generated = dasc.G(x_batch)
-            dasc.D(cluster, generated)
+            real_z, fake_z = dasc.G(x_batch)
+            dasc.D(real_z, fake_z)
             d_var = [dasc._U[i].trainable_variables[0] for i in range(k)]
             for i in range(d_iter_num):
-                with tf.GradientTape() as tape:
-                    proj = dasc.forward(cluster, generated)
-                    z = dasc._z
-                    l_d = loss.L_D(z, proj, k)
+                with tf.GradientTape(watch_accessed_variables=False) as tape:
+                    tape.watch(d_var)
+                    proj = dasc.forward(real_z)
+                    # z = dasc._z
+                    l_d = loss.L_D(real_z, proj, k)
                     print("L_d: {}".format(str(l_d)))
                 grads = tape.gradient(l_d, d_var)
+                print(tape.watched_variables())
                 optimizer.apply_gradients(zip(grads, d_var))
             print("Epoch[{}]: D loss={}".format(str(epoch+1), str(l_d)))
 
@@ -43,7 +45,7 @@ def train(train_data, batch_size=72, input_shape=[32,32,1], epoch_num=10, k=20, 
                 z_se = dasc.conv_ae.z_se
                 theta = dasc.conv_ae.layers[1].get_weights()[0]
                 rec_loss, reconst_loss, self_expr_loss, penalty = loss.ae_loss(x_r_batch, x_reconst, z_conv, z_se, theta)
-                G_loss = rec_loss + loss.L_a(cluster, generated, d_var, k)
+                G_loss = rec_loss + loss.L_a(real_z, fake_z, d_var, k)
             grads = tape.gradient(G_loss, g_var)
             optimizer.apply_gradients(zip(grads, g_var))
 
