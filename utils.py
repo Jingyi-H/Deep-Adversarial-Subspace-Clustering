@@ -2,6 +2,23 @@ import numpy as np
 import tensorflow as tf
 from munkres import Munkres
 
+def shuffle(x, y):
+    index = np.arange(x.shape[0])
+    np.random.shuffle(index)
+    x = x[index, :, :, :]
+    y = y[index, :]
+
+    return x, y
+
+def u_regularize(U):
+	d = U.shape[0]
+	col_norm = tf.norm(U, axis=0, keepdims=True)
+	coef = tf.tile(col_norm, tf.constant([d,1]))
+	U = U/coef
+
+	return U
+
+
 def best_map(L1, L2):
 	#L1 should be the real labels and L2 should be the clustering number we got
 	Label1 = np.unique(L1)       # 去除重复的元素，由小大大排列
@@ -46,7 +63,7 @@ def generate_data(z_k, m_k, m_gen):
 			gen = _z
 		else:
 			gen = np.hstack([gen, _z])
-	print(gen.shape)
+	# print(gen.shape)
 
 	return gen
 
