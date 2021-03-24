@@ -1,4 +1,5 @@
 import tensorflow as tf
+import numpy as np
 from tensorflow.keras import backend as K
 
 
@@ -56,11 +57,38 @@ def L_D(real_z, fake_z, real_proj, fake_proj, kcluster, epsilon=0.1):
 
 	return loss
 
-def r1():
-	pass
+def r1(u_list, beta1=0.01):
+	m = len(u_list)
+	R1 = 0
+	for i in range(m):
+		for j in range(m):
+			if i == j:
+				continue
+			else:
+				r = tf.matmul(u_list[i], u_list[j], transpose_a=True)
+				r = tf.norm(r, keepdims=True)
+				r = r * r
+				R1 = R1 + r
 
-def r2():
-	pass
+	R1 = beta1 * R1
+	# print("R1 = ", R1)
+
+	return R1
+
+def r2(u_list, beta2=0.01):
+	m = len(u_list)
+	R2 = 0
+	for i in range(m):
+		r = tf.matmul(u_list[i], u_list[i], transpose_a=True)
+		I = tf.Variable(np.eye(30), dtype=r.dtype)
+		r = tf.norm(r - I, keepdims=True)
+		r = r * r
+		R2 = R2 + r
+
+	R2 = beta2 * R2
+	# print("R2 = ", R2)
+
+	return R2
 
 # def L_a(z, proj, kcluster):
 # 	loss = 0
