@@ -23,7 +23,7 @@ def train(train_data, batch_size=72, input_shape=[32,32,1], epoch_num=10, k=20, 
 
     g_var = dasc.conv_ae.trainable_variables
     # d_var = dasc._U
-    optimizer = tf.optimizers.Adam(lr=1e-4)
+    optimizer = tf.optimizers.Adam(lr=2e-4)
 
     for epoch in range(epoch_num):
         for (batch, (x_batch, x_r_batch)) in enumerate(train_data):
@@ -31,13 +31,14 @@ def train(train_data, batch_size=72, input_shape=[32,32,1], epoch_num=10, k=20, 
                 real_z, fake_z = dasc.G(x_batch)
                 dasc.D(real_z, fake_z, r)
                 d_var = [dasc._U[i].trainable_variables[0] for i in range(k)]
-                print(d_var)
+                # print(d_var)
                 for i in range(d_iter_num):
                     with tf.GradientTape(watch_accessed_variables=False) as tape:
                         tape.watch(d_var)
                         real_proj = dasc.forward(real_z)
                         fake_proj = dasc.forward(fake_z)
                         l_d = loss.L_D(real_z, fake_z, real_proj, fake_proj, k)
+                        l_d = l_d + loss.r1(d_var) + loss.r2(d_var)
                         # print("L_d: {}".format(str(l_d)))
                     grads = tape.gradient(l_d, d_var)
                     # print(tape.watched_variables())
