@@ -5,15 +5,20 @@ from tensorflow.python.keras.layers import Layer
 from tensorflow.python.keras.initializers import Initializer
 from sklearn.cluster import SpectralClustering
 import numpy as np
+import os
 import math
 from scipy.linalg import qr
 # from scipy.sparse.linalg import svds
 # from sklearn.preprocessing import normalize
 
-from DASC import utils
-from DASC import loss
+import utils
+import loss
+# from DASC import utils
+# from DASC import loss
 
 tf.keras.backend.set_floatx('float32')
+tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
+# os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 class Self_Expressive(Layer):
 	def __init__(self, batch_size, **kwargs):
@@ -111,16 +116,18 @@ class DASC(object):
 	def __init__(self, input_shape, batch_size=1440, kcluster=20):
 		super(DASC, self).__init__()
 		self.kcluster = kcluster
+		self.batch_size = batch_size
 		self.conv_ae = ConvAE(batch_size=batch_size, input_shape=input_shape)
 		self.conv_ae.build(input_shape=input_shape)
-		self._U = []	# 每个cluster对应的U矩阵
+		self._U = []	# 每个cluster对应的U Projection layer
+		self.u_matrix = []
 		# self._m = []	# 每个cluster的样本数，包含真假样本
-		self._z = []
+		# self._z = []
 
 	def call(self, x):
 		pass
 
-	def initialize(self, train_data, pre_train_epoch=10):
+	def initialize(self, train_data, pre_train_epoch=10, learning_rate=1e-3):
 		'''
 		pre-train generator G without considering D
 		:param x:
@@ -128,8 +135,9 @@ class DASC(object):
 		'''
 
 		variables = self.conv_ae.trainable_variables
-		optimizer = tf.optimizers.Adam(lr=2e-4)
+		optimizer = tf.optimizers.Adam(lr=learning_rate)
 		print(self.conv_ae.summary())
+		print("Pretraining model...")
 		for epoch in range(pre_train_epoch):
 			for (batch, (x_batch, x_r_batch)) in enumerate(train_data):
 				with tf.GradientTape() as tape:
@@ -158,7 +166,7 @@ class DASC(object):
 		# print(z_conv.shape)
 		z_se = self.conv_ae.z_se
 		theta = self.conv_ae.layers[1].get_weights()[0]
-		theta = np.reshape(theta, [1440, 1440])
+		theta = np.reshape(theta, [self.batch_size, self.batch_size])
 		affinity = 0.5*(theta + theta.T)
 
 		# 构造相似度矩阵，自表达层的参数即kernel的权重
@@ -194,7 +202,7 @@ class DASC(object):
 
 		return clusters, gen_data
 
-	def D(self, real_z, fake_z):
+	def D(self, real_z, fake_z, r):
 		'''
 
 		:param clusters: G中分出的聚类
@@ -202,22 +210,25 @@ class DASC(object):
 		:return:
 		'''
 		_U = []		# Ui 列表
-		# _m = []		# Ci的样本数 (with fake samples)
-		# _z = []
+		u_matrix = []
 		for k in range(self.kcluster):
-			z = np.hstack([real_z[k], fake_z[k]])
-			U, R = qr(z, mode='full')
-			# U =
-			# print("U:", U)
+			# random select r_i vectors from C_i to form U
+			index = np.arange(real_z[k].shape[1])
+			np.random.shuffle(index)
+			z = tf.gather(real_z[k], axis=1, indices=index)
+			# print("z", z.shape)
+			z = z[:, 0:r]
+			# QR decomposition: get U_i
+			q, U = qr(z, mode='full')
 			# Lr_z = loss.projection_residual(_z, U)
-			# _m.append(z.shape[0])
 			# print(U.shape)
 			u = Projection(U, input_shape=z.shape, name="U{}".format(str(k)))
 			u.build(z.shape)
 			_U.append(u)
-			# _z.append(z)
+			u_matrix.append(U)
 
 		self._U = _U
+		self.u_matrix = u_matrix
 		# self._m = _m
 		# self._z = _z
 
@@ -226,7 +237,7 @@ class DASC(object):
 		for k in range(self.kcluster):
 			# z = np.hstack([real_z[k], fake_z[k]])
 			p = self._U[k](z[k])
-			print(k, p.shape)
+			# print(k, p.shape)
 			proj[k] = p
 
 		return proj
