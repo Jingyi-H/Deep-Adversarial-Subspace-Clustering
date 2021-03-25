@@ -25,13 +25,18 @@ def parse_arguments(argv):
 	parser.add_argument('--save_dir', default="logs/weights.h5")
 	parser.add_argument('--epoch', type=int, default=10)
 	parser.add_argument('--batch_size', type=int, default=1440)
+	parser.add_argument('--pretrain_epoch', type=int, default=10)
+	parser.add_argument('--alpha', type=float, default=0.9)
+	parser.add_argument('--lr_g', type=float, default=1e-3)
+	parser.add_argument('--lr_d', type=float, default=1e-3)
 
 	return parser.parse_args(argv)
 
 if __name__ == "__main__":
 	args = parse_arguments(sys.argv[1:])
 	img, label = load_data()
-	img, label = utils.shuffle(img, label)
+	# img, label = utils.shuffle(img, label)
 	train_db = tf.data.Dataset.from_tensor_slices((img, img))
 	train_db = train_db.batch(1440)
-	theta = train(train_db, label, epoch_num=args.epoch, batch_size=args.batch_size)
+	theta = train(train_db, label, epoch_num=args.epoch, batch_size=args.batch_size, pre_train_epoch=args.pretrain_epoch,
+				  alpha=args.alpha, g_lr=args.lr_g, d_lr=args.lr_d)
