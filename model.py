@@ -57,7 +57,8 @@ class Projection(Layer):
 		super(Projection, self).build(input_shape)  # 一定要在最后调用它
 
 	def call(self, z):
-		return K.dot(K.dot(self.U, K.transpose(self.U)), z)
+		U = utils.u_normalize(self.U)
+		return K.dot(K.dot(U, K.transpose(U)), z)
 
 class ConvAE(Model):
 	def __init__(self, input_shape=(1440, 32,32,1), batch_size=None, learning_rate=1e-3, num_class=20):
@@ -150,8 +151,8 @@ class DASC(object):
 				grads = tape.gradient(rec_loss, variables)
 				optimizer.apply_gradients(zip(grads, variables))
 
-			print("epoch[{}]: loss={}\treconst_loss={}\tself_expr_loss={}\tpenalty={}".format(
-				str(epoch+1), str(float(rec_loss)), str(reconst_loss.numpy()), str(self_expr_loss.numpy()), str(penalty.numpy().ravel()[0])))
+			print("Epoch[{}/{}]: loss={}\treconst_loss={}\tself_expr_loss={}\tpenalty={}".format(
+				str(epoch+1), str(pre_train_epoch), str(float(rec_loss)), str(reconst_loss.numpy()), str(self_expr_loss.numpy()), str(penalty.numpy().ravel()[0])))
 
 
 	def G(self, x, alpha=0.8):
@@ -167,12 +168,17 @@ class DASC(object):
 		z_se = self.conv_ae.z_se
 		theta = self.conv_ae.layers[1].get_weights()[0]
 		theta = np.reshape(theta, [self.batch_size, self.batch_size])
+		# normalize theta
+		theta = utils.theta_normalize(theta)
+
+		# coef = tf.tile(coef, tf.constant([theta.shape[0],1]))
+		# theta = theta/coef
 		affinity = 0.5*(theta + theta.T)
 
 		# 构造相似度矩阵，自表达层的参数即kernel的权重
 		affinity = np.abs(affinity)
 		# Spectral Clustering(N-Cut)
-		sc = SpectralClustering(self.kcluster, affinity='precomputed', n_init=100, assign_labels='discretize')
+		sc = SpectralClustering(self.kcluster, affinity='precomputed', n_init=100, eigen_solver='arpack', assign_labels='discretize')
 		label_pred = sc.fit_predict(affinity)
 
 		cidx = []
@@ -211,6 +217,7 @@ class DASC(object):
 		'''
 		_U = []		# Ui 列表
 		u_matrix = []
+		selected_z = []
 		for k in range(self.kcluster):
 			# random select r_i vectors from C_i to form U
 			index = np.arange(real_z[k].shape[1])
@@ -222,15 +229,18 @@ class DASC(object):
 			q, U = qr(z, mode='full')
 			# Lr_z = loss.projection_residual(_z, U)
 			# print(U.shape)
+			U = utils.u_normalize(U)
 			u = Projection(U, input_shape=z.shape, name="U{}".format(str(k)))
 			u.build(z.shape)
 			_U.append(u)
 			u_matrix.append(U)
+			selected_z.append(z)
 
 		self._U = _U
 		self.u_matrix = u_matrix
 		# self._m = _m
 		# self._z = _z
+		return selected_z
 
 	def forward(self, z):
 		proj = [i for i in range(self.kcluster)]
