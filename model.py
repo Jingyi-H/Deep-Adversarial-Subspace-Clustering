@@ -34,7 +34,9 @@ class Self_Expressive(Layer):
 		super(Self_Expressive, self).build(input_shape)  # 一定要在最后调用它
 
 	def call(self, x):
-		return K.dot(self.theta, x)
+		z = K.dot(self.theta, x)
+		z = K.relu(z)
+		return z
 
 class U_initializer(Initializer):
 	def __init__(self, matrix):
@@ -58,7 +60,11 @@ class Projection(Layer):
 
 	def call(self, z):
 		U = utils.u_normalize(self.U)
-		return K.dot(K.dot(U, K.transpose(U)), z)
+		z = K.dot(K.transpose(U), z)
+		z = K.relu(z)
+		z = K.dot(U, z)
+		z = K.relu(z)
+		return z
 
 class ConvAE(Model):
 	def __init__(self, input_shape=(1440, 32,32,1), batch_size=None, learning_rate=1e-3, num_class=20):
@@ -92,13 +98,6 @@ class ConvAE(Model):
 								   kernel_initializer = tf.keras.initializers.GlorotNormal())
 		])
 
-	# def build(self):
-	# 	inputs = [self.batch_size] + self.input_shape
-	# 	inputs = tuple(inputs)
-	# 	self.encoder.build(inputs)
-	# 	self.self_expressive.build((-1, 3840))
-	# 	self.decoder.build((-1, 3840))
-
 	def call(self, x):
 		z = self.encoder(x)
 		z = tf.reshape(z, [self.batch_size, 3840])	# 整个batch一起训练
@@ -112,13 +111,71 @@ class ConvAE(Model):
 
 		return x
 
+class Mnist_Conv_AE(Model):
+	def __init__(self, input_shape, batch_size, learning_rate):
+		super(Mnist_Conv_AE, self).__init__()
+
+		self.batch_size = batch_size
+		# self.input_img = layers.Input(shape=input_shape)
+		self.learning_rate = learning_rate
+		# COIL-20的编码器只有一层卷积
+		self.encoder = Sequential([
+			layers.Conv2D(20, kernel_size=5,
+						  activation='relu',
+						  input_shape=input_shape[1:],
+						  strides=2,
+						  padding='SAME',
+						  kernel_initializer = tf.keras.initializers.GlorotNormal()),
+			layers.Conv2D(10, kernel_size=3,
+						  activation='relu',
+						  input_shape=input_shape[1:],
+						  strides=2,
+						  padding='SAME',
+						  kernel_initializer = tf.keras.initializers.GlorotNormal()),
+			layers.Conv2D(5, kernel_size=3,
+						  activation='relu',
+						  input_shape=input_shape[1:],
+						  strides=2,
+						  padding='SAME',
+						  kernel_initializer = tf.keras.initializers.GlorotNormal()),
+			layers.Reshape((-1, 3840))
+		])
+
+		self.self_expressive = Self_Expressive(self.batch_size, input_shape=(batch_size, batch_size))
+		self.z_conv = None
+		self.z_se = None
+		self.decoder = Sequential([
+			layers.Reshape((16, 16, 15)),
+			layers.Conv2DTranspose(15, kernel_size=3,
+								   activation='relu',
+								   # input_shape=input_shape,
+								   strides=2,
+								   padding='SAME',
+								   kernel_initializer = tf.keras.initializers.GlorotNormal()),
+			layers.Conv2DTranspose(15, kernel_size=3,
+								   activation='relu',
+								   # input_shape=input_shape,
+								   strides=2,
+								   padding='SAME',
+								   kernel_initializer = tf.keras.initializers.GlorotNormal()),
+			layers.Conv2DTranspose(15, kernel_size=3,
+								   activation='relu',
+								   # input_shape=input_shape,
+								   strides=2,
+								   padding='SAME',
+								   kernel_initializer = tf.keras.initializers.GlorotNormal())
+		])
+
+	def call(self):
+		pass
 
 class DASC(object):
-	def __init__(self, input_shape, batch_size=1440, kcluster=20):
+	def __init__(self, model, input_shape, batch_size=1440, kcluster=20):
 		super(DASC, self).__init__()
 		self.kcluster = kcluster
 		self.batch_size = batch_size
-		self.conv_ae = ConvAE(batch_size=batch_size, input_shape=input_shape)
+		# self.conv_ae = ConvAE(batch_size=batch_size, input_shape=input_shape)
+		self.conv_ae = model(batch_size=batch_size, input_shape=input_shape)
 		self.conv_ae.build(input_shape=input_shape)
 		self._U = []	# 每个cluster对应的U Projection layer
 		self.u_matrix = []
@@ -168,15 +225,13 @@ class DASC(object):
 		z_se = self.conv_ae.z_se
 		theta = self.conv_ae.layers[1].get_weights()[0]
 		theta = np.reshape(theta, [self.batch_size, self.batch_size])
+
 		# normalize theta
 		theta = utils.theta_normalize(theta)
-
-		# coef = tf.tile(coef, tf.constant([theta.shape[0],1]))
-		# theta = theta/coef
-		affinity = 0.5*(theta + theta.T)
+		affinity = 0.5*(np.abs(theta) + np.abs(theta.T))
 
 		# 构造相似度矩阵，自表达层的参数即kernel的权重
-		affinity = np.abs(affinity)
+		# affinity = np.abs(affinity)
 		# Spectral Clustering(N-Cut)
 		sc = SpectralClustering(self.kcluster, affinity='precomputed', n_init=100, eigen_solver='arpack', assign_labels='discretize')
 		label_pred = sc.fit_predict(affinity)
@@ -225,8 +280,10 @@ class DASC(object):
 			z = tf.gather(real_z[k], axis=1, indices=index)
 			# print("z", z.shape)
 			z = z[:, 0:r]
+
 			# QR decomposition: get U_i
-			q, U = qr(z, mode='full')
+			U, other = qr(z, mode='economic')
+
 			# Lr_z = loss.projection_residual(_z, U)
 			# print(U.shape)
 			U = utils.u_normalize(U)
@@ -234,13 +291,12 @@ class DASC(object):
 			u.build(z.shape)
 			_U.append(u)
 			u_matrix.append(U)
-			selected_z.append(z)
 
 		self._U = _U
 		self.u_matrix = u_matrix
 		# self._m = _m
 		# self._z = _z
-		return selected_z
+
 
 	def forward(self, z):
 		proj = [i for i in range(self.kcluster)]
