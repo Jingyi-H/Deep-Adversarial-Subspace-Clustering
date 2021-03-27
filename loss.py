@@ -40,7 +40,7 @@ def L_r(z, proj, kcluster):
 	loss = 0
 	for k in range(kcluster):
 		# m = z[k].shape[1]										# z[k] 列向量构成的矩阵，m为向量数即样本数
-		loss = loss + tf.reduce_mean(projection_residual(z[k], proj[k], flag=False))		# + max(epsilon - projection_residual(z[k], proj[k]), 0)/m
+		loss = loss + tf.reduce_mean(projection_residual(z[k], proj[k], flag=False))
 
 	loss = loss/kcluster
 
@@ -51,10 +51,16 @@ def L_D(real_z, fake_z, real_proj, fake_proj, kcluster, epsilon=0.1):
 	loss = 0
 	for k in range(kcluster):
 		m_ = fake_z[k].shape[1]
-		z = real_z[k][:, 0:m_]
+		index = np.arange(real_z[k].shape[1])
+		np.random.shuffle(index)
+		z = tf.gather(real_z[k], axis=1, indices=index)
+		proj = tf.gather(real_proj[k], axis=1, indices=index)
+		z = z[:, 0:m_]
 		term2 = epsilon * tf.ones([1, m_], dtype=z.dtype) - projection_residual(fake_z[k], fake_proj[k], flag=False)
-		loss = loss + projection_residual(z, real_proj[k][:, 0:m_])/m_ + tf.reduce_mean(tf.maximum(term2, tf.zeros([1, m_], dtype=z.dtype)))
+		loss = loss + projection_residual(z, proj[:, 0:m_])/m_ + tf.reduce_mean(tf.maximum(term2, tf.zeros([1, m_], dtype=z.dtype)))
 
+	loss = loss/kcluster
+	
 	return loss
 
 def r1(u_list, beta1=0.01):
@@ -80,7 +86,7 @@ def r2(u_list, beta2=0.01):
 	R2 = 0
 	for i in range(m):
 		r = tf.matmul(u_list[i], u_list[i], transpose_a=True)
-		I = tf.Variable(np.eye(30), dtype=r.dtype)
+		I = tf.Variable(np.eye(r.shape), dtype=r.dtype)
 		r = tf.norm(r - I, keepdims=True)
 		r = r * r
 		R2 = R2 + r
