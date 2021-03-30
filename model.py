@@ -8,6 +8,7 @@ import numpy as np
 import os
 import math
 from scipy.linalg import qr
+from itertools import combinations as comb
 # from scipy.sparse.linalg import svds
 # from sklearn.preprocessing import normalize
 
@@ -29,12 +30,17 @@ class Self_Expressive(Layer):
 		# 为该层创建一个可训练的权重
 		self.theta = self.add_weight(name='Theta',
 									  shape=(1, self.batch_size, self.batch_size),
-									  initializer='uniform',
+									  initializer=tf.keras.initializers.Constant(value=1e-8),
 									  trainable=True)
+		# self.bias = self.add_weight(name='bias',
+		# 							shape=(1, self.batch_size, self.batch_size),
+		# 							initializer='zeros',
+		# 							trainable=True)
 		super(Self_Expressive, self).build(input_shape)  # 一定要在最后调用它
 
 	def call(self, x):
 		z = K.dot(self.theta, x)
+		# z = K.bias_add(z, self.bias)
 		z = K.relu(z)
 		return z
 
@@ -59,21 +65,21 @@ class Projection(Layer):
 		super(Projection, self).build(input_shape)  # 一定要在最后调用它
 
 	def call(self, z):
+		# U = tf.keras.utils.normalize(U, axis=1, order=2)
 		U = utils.u_normalize(self.U)
-		z = K.dot(K.transpose(U), z)
-		z = K.relu(z)
-		z = K.dot(U, z)
-		z = K.relu(z)
+		z = K.dot(K.transpose(self.U), z)
+		# z = K.relu(z)
+		z = K.dot(self.U, z)
+		# z = K.relu(z)
 		return z
 
 class ConvAE(Model):
-	def __init__(self, input_shape=(1440, 32,32,1), batch_size=None, learning_rate=1e-3, num_class=20):
+	def __init__(self, input_shape=(1440, 32, 32, 1), batch_size=None):
 		super(ConvAE, self).__init__()
 
 		# self.input_shape = input_shape # [32, 32, 1] i.e. 32x32x1 单通道图像
 		self.batch_size = batch_size
 		# self.input_img = layers.Input(shape=input_shape)
-		self.learning_rate = learning_rate
 		# COIL-20的编码器只有一层卷积
 		self.encoder = Sequential([
 			layers.Conv2D(15, kernel_size=3,
@@ -82,14 +88,14 @@ class ConvAE(Model):
 						  strides=2,
 						  padding='SAME',
 						  kernel_initializer = tf.keras.initializers.GlorotNormal()),
-			layers.Reshape((-1, 3840))
+			layers.Reshape((-1, 3840), trainable=False)
 		])
 
 		self.self_expressive = Self_Expressive(self.batch_size, input_shape=(batch_size, batch_size))
 		self.z_conv = None
 		self.z_se = None
 		self.decoder = Sequential([
-			layers.Reshape((16, 16, 15)),
+			layers.Reshape((16, 16, 15), trainable=False),
 			layers.Conv2DTranspose(15, kernel_size=3,
 								   activation='relu',
 								   # input_shape=input_shape,
@@ -138,7 +144,7 @@ class Mnist_Conv_AE(Model):
 						  strides=2,
 						  padding='SAME',
 						  kernel_initializer = tf.keras.initializers.GlorotNormal()),
-			layers.Reshape((-1, 3840))
+			layers.Reshape((-1, 3840), trainable=False)
 		])
 
 		self.self_expressive = Self_Expressive(self.batch_size, input_shape=(batch_size, batch_size))
@@ -166,11 +172,21 @@ class Mnist_Conv_AE(Model):
 								   kernel_initializer = tf.keras.initializers.GlorotNormal())
 		])
 
-	def call(self):
-		pass
+	def call(self, x):
+		z = self.encoder(x)
+		z = tf.reshape(z, [self.batch_size, 3840])	# 整个batch一起训练
+		self.z_conv = z
+		# print(z)
+		z = self.self_expressive(z)
+		self.z_se = z									# self_expressive_z = theta*z
+		# print("z_se:", z.shape)
+		z = tf.reshape(z, [self.batch_size, 1, 3840])
+		x = self.decoder(z)
+
+		return x
 
 class DASC(object):
-	def __init__(self, model, input_shape, batch_size=1440, kcluster=20):
+	def __init__(self, model, input_shape, batch_size=1440, kcluster=20, alpha=0.8, r=30):
 		super(DASC, self).__init__()
 		self.kcluster = kcluster
 		self.batch_size = batch_size
@@ -179,11 +195,15 @@ class DASC(object):
 		self.conv_ae.build(input_shape=input_shape)
 		self._U = []	# 每个cluster对应的U Projection layer
 		self.u_matrix = []
+		self.alpha = alpha
+		self.r = r
 		# self._m = []	# 每个cluster的样本数，包含真假样本
 		# self._z = []
 
 	def call(self, x):
-		pass
+		self.G(x, alpha=self.alpha)
+		real_z, fake_z = self.G(x, alpha=self.alpha)
+		self.D(real_z, fake_z, self.r)
 
 	def initialize(self, train_data, pre_train_epoch=10, learning_rate=1e-3):
 		'''
@@ -197,14 +217,14 @@ class DASC(object):
 		print(self.conv_ae.summary())
 		print("Pretraining model...")
 		for epoch in range(pre_train_epoch):
-			for (batch, (x_batch, x_r_batch)) in enumerate(train_data):
+			for (batch, (x_batch, y_batch)) in enumerate(train_data):
 				with tf.GradientTape() as tape:
 					x_reconst = self.conv_ae(x_batch)
 					z_conv = self.conv_ae.z_conv
 					z_se = self.conv_ae.z_se
 					theta = self.conv_ae.layers[1].get_weights()[0]
 					# print(x_reconst.dtype, x_r_batch.dtype)
-					rec_loss, reconst_loss, self_expr_loss, penalty = loss.ae_loss(x_r_batch, x_reconst, z_conv, z_se, theta)
+					rec_loss, reconst_loss, self_expr_loss, penalty = loss.ae_loss(x_batch, x_reconst, z_conv, z_se, theta)
 				grads = tape.gradient(rec_loss, variables)
 				optimizer.apply_gradients(zip(grads, variables))
 
@@ -227,41 +247,37 @@ class DASC(object):
 		theta = np.reshape(theta, [self.batch_size, self.batch_size])
 
 		# normalize theta
-		theta = utils.theta_normalize(theta)
+		# theta = utils.theta_normalize(theta)
 		affinity = 0.5*(np.abs(theta) + np.abs(theta.T))
 
 		# 构造相似度矩阵，自表达层的参数即kernel的权重
 		# affinity = np.abs(affinity)
 		# Spectral Clustering(N-Cut)
-		sc = SpectralClustering(self.kcluster, affinity='precomputed', n_init=100, eigen_solver='arpack', assign_labels='discretize')
+		sc = SpectralClustering(n_clusters=self.kcluster, affinity='precomputed', n_init=100, eigen_solver='arpack', assign_labels='kmeans')
+		sc.fit(affinity)
 		label_pred = sc.fit_predict(affinity)
 
 		cidx = []
-		clusters = []
+		real_z = []
 		# label = []
-		gen_data = []
+		fake_z = []
+		z_conv = tf.transpose(z_conv)
+
 		# generate fake data
 		for k in range(self.kcluster):
 			idx = np.where(label_pred == k)[0].tolist()
 			cidx.append(idx)
-			basis = tf.gather(z_conv, axis=0, indices=idx)
-			basis = tf.transpose(basis)
-			clusters.append(basis)
+			basis = tf.gather(z_conv, axis=1, indices=idx)
+			# print(basis.shape)
+			# basis = tf.transpose(basis)
+			real_z.append(basis)
 			m_k = len(idx)						# num of samples in cluster Ck
-			m_gen = math.floor(m_k * alpha)		# num of generated samples
+			m_fake = math.ceil(m_k * alpha)		# num of generated samples
 			# 生成数据
-			z_k = utils.generate_data(basis, m_k, m_gen)
-			# 生成标签
-			l = np.tile(np.array([k]), m_gen).reshape(-1, 1)
-			gen_data.append(z_k)
-			# if k == 0:
-			#     label = l
-			#     gen_data = z_k
-			# else:
-			#     label = np.vstack(l)
-			#     gen_data = np.vstack(z_k)
+			z_k = utils.generate_data(basis, m_k, m_fake)
+			fake_z.append(z_k)
 
-		return clusters, gen_data
+		return real_z, fake_z
 
 	def D(self, real_z, fake_z, r):
 		'''
@@ -274,28 +290,37 @@ class DASC(object):
 		u_matrix = []
 		selected_z = []
 		for k in range(self.kcluster):
-			# random select r_i vectors from C_i to form U
-			index = np.arange(real_z[k].shape[1])
-			np.random.shuffle(index)
-			z = tf.gather(real_z[k], axis=1, indices=index)
-			# print("z", z.shape)
-			z = z[:, 0:r]
+			# index = np.arange(real_z[k].shape[1])
+			# np.random.shuffle(index)
+			# z = tf.gather(real_z[k], axis=1, indices=index)
 
 			# QR decomposition: get U_i
-			U, other = qr(z, mode='economic')
+			U_raw, other = qr(real_z[k], mode='full')
+			u_k = 0
+			min_pr = 99999
+			index = np.arange(U_raw.shape[1])
+			for i in range(100):
+				np.random.shuffle(index)
+				U = tf.gather(U_raw, axis=1, indices=index[0:r])
+				# U = U[:, 0:r]
+				u = Projection(U, input_shape=real_z[k].shape, name="candidate_".format(str(k)))
+				u.build(real_z[k].shape)
+				# calculate projection residuals
+				proj = u(real_z[k])
+				l = tf.reduce_mean(loss.projection_residual(real_z[k], proj))
+				if l < min_pr:
+					min_pr = l
+					u_k = u
+				# print(idx_range)
+				# U = U[:, 0:r]
+				# # Lr_z = loss.projection_residual(_z, U)
+				# # print(U.shape)
+				# u_k = Projection(U, input_shape=z.shape, name="U{}".format(str(k)))
+				# u_k.build(z.shape)
 
-			# Lr_z = loss.projection_residual(_z, U)
-			# print(U.shape)
-			U = utils.u_normalize(U)
-			u = Projection(U, input_shape=z.shape, name="U{}".format(str(k)))
-			u.build(z.shape)
-			_U.append(u)
-			u_matrix.append(U)
+			_U.append(u_k)
 
 		self._U = _U
-		self.u_matrix = u_matrix
-		# self._m = _m
-		# self._z = _z
 
 
 	def forward(self, z):
