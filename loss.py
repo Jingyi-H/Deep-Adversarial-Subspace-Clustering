@@ -3,25 +3,18 @@ import numpy as np
 from tensorflow.keras import backend as K
 
 
-def projection_residual(z, proj, flag=True):
+def projection_residual(z, proj):
 	# z = tf.cast(z, dtype='float64')
 	# proj = tf.cast(proj, dtype='float64')
-	if flag == True:
-		loss = tf.norm(z - proj, keepdims=True)
-		# loss = tf.reshape(loss, [1, 1])
-		loss = tf.matmul(loss, loss)
-		# loss = tf.cast(tf.matmul(loss, loss), dtype=tf.float64)
-	else:
-		loss = tf.norm(z - proj, axis=0)
-		loss = loss * loss
-		# print(loss.shape)
+	loss = tf.norm(z - proj, axis=0)
+	loss = loss * loss
 
 	return loss
 
 def reconst_loss(x_true, x_reconst):
 	return tf.reduce_mean(tf.square(x_true - x_reconst))
 
-def ae_loss(x_true, x_reconst, z_conv, z_se, theta, lambda1=0.5, lambda2=15, lambda3=1):
+def ae_loss(x_true, x_reconst, z_conv, z_se, theta, lambda1=0.1, lambda2=15, lambda3=1):
 	# x_reconst = tf.cast(x_reconst, dtype=tf.float64)
 	x_true = tf.cast(x_true, dtype=x_reconst.dtype)
 	reconst_loss = tf.reduce_sum(tf.square(x_true - x_reconst))
@@ -40,7 +33,7 @@ def L_r(z, proj, kcluster):
 	loss = 0
 	for k in range(kcluster):
 		# m = z[k].shape[1]										# z[k] 列向量构成的矩阵，m为向量数即样本数
-		loss = loss + tf.reduce_mean(projection_residual(z[k], proj[k], flag=False))
+		loss = loss + tf.reduce_mean(projection_residual(z[k], proj[k]))
 
 	loss = loss/kcluster
 
@@ -51,13 +44,13 @@ def L_D(real_z, fake_z, real_proj, fake_proj, kcluster, epsilon=0.1):
 	loss = 0
 	for k in range(kcluster):
 		m_ = fake_z[k].shape[1]
-		index = np.arange(real_z[k].shape[1])
-		np.random.shuffle(index)
-		z = tf.gather(real_z[k], axis=1, indices=index)
-		proj = tf.gather(real_proj[k], axis=1, indices=index)
-		z = z[:, 0:m_]
-		term2 = epsilon * tf.ones([1, m_], dtype=z.dtype) - projection_residual(fake_z[k], fake_proj[k], flag=False)
-		loss = loss + projection_residual(z, proj[:, 0:m_])/m_ + tf.reduce_mean(tf.maximum(term2, tf.zeros([1, m_], dtype=z.dtype)))
+		L_real = projection_residual(real_z[k], real_proj[k])
+		idx = tf.argsort(L_real, axis=-1, direction='ASCENDING')
+		L_real = tf.sort(L_real, axis=-1, direction='ASCENDING')
+		# z = tf.gather(real_z[k], axis=1, indices=index)
+		# proj = tf.gather(real_proj[k], axis=1, indices=index)
+		term2 = epsilon * tf.ones([1, m_], dtype=L_real.dtype) - projection_residual(fake_z[k], fake_proj[k])
+		loss = loss + tf.reduce_mean(L_real[0:m_]) + tf.reduce_mean(tf.maximum(term2, tf.zeros([1, m_], dtype=L_real.dtype)))
 
 	loss = loss/kcluster
 	
@@ -86,7 +79,7 @@ def r2(u_list, beta2=0.01):
 	R2 = 0
 	for i in range(m):
 		r = tf.matmul(u_list[i], u_list[i], transpose_a=True)
-		I = tf.Variable(np.eye(r.shape), dtype=r.dtype)
+		I = tf.Variable(np.eye(r.shape[0]), dtype=r.dtype)
 		r = tf.norm(r - I, keepdims=True)
 		r = r * r
 		R2 = R2 + r
