@@ -15,12 +15,12 @@ from sklearn.cluster import SpectralClustering
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
 def train(train_data, batch_size=1000, input_shape=[28,28,1], epoch_num=10, pre_train_epoch=10,
-          k=10, d_iter_num=5, r=30, alpha=0.95, g_lr=1e-3, d_lr=2e-4, save_dir='model'):
+          k=10, d_iter_num=5, r=10, alpha=0.95, g_lr=1e-3, d_lr=2e-4, save_dir='model'):
 
     inputs = tuple([batch_size] + input_shape)
 
-    dasc = DASC(Mnist_ConvAE, input_shape=inputs, batch_size=batch_size, kcluster=20)
-    dasc.initialize(train_data, pre_train_epoch=pre_train_epoch)
+    dasc = DASC(Mnist_ConvAE, input_shape=inputs, batch_size=batch_size, kcluster=k)
+    dasc.initialize(train_data, pre_train_epoch=pre_train_epoch, lambda2=0.1, lambda3=1.0)
 
     print("Start Training...")
     g_var = dasc.conv_ae.trainable_variables
@@ -56,12 +56,12 @@ def train(train_data, batch_size=1000, input_shape=[28,28,1], epoch_num=10, pre_
 
                 theta = dasc.conv_ae.layers[1].get_weights()[0]
                 theta = np.reshape(theta, [batch_size, batch_size])
-                rec_loss, reconst_loss, self_expr_loss, penalty = loss.ae_loss(x_batch, x_reconst, z_conv, z_se, theta)
+                rec_loss, reconst_loss, self_expr_loss, penalty = loss.ae_loss(x_batch, x_reconst, z_conv, z_se, theta, lambda2=0.1, lambda3=1)
                 G_loss = rec_loss + loss.L_r(fake_z, proj_fake, k)
                 # calculate accuracy of prediction
                 # theta = utils.theta_normalize(theta)
                 affinity = 0.5 * (np.abs(theta) + np.abs(theta.T))
-                sc = SpectralClustering(n_clusters=20, eigen_solver='arpack', affinity='precomputed', n_init=100, assign_labels='kmeans')
+                sc = SpectralClustering(n_clusters=k, eigen_solver='arpack', affinity='precomputed', n_init=100, assign_labels='kmeans')
                 y_hat = sc.fit_predict(affinity)
                 y_hat = y_hat.astype(int)
                 y_true = tf.reshape(y_batch, y_hat.shape)
@@ -103,7 +103,7 @@ def load_mnist():
 
 x_train, y_train = load_mnist()
 train_db = tf.data.Dataset.from_tensor_slices((x_train, y_train))
-train_db = train_db.batch(1000).shuffle(30)
-train(train_db)
+train_db = train_db.batch(1000).shuffle(10)
+train(train_db, epoch_num=20, batch_size=1000, pre_train_epoch=1000, alpha=0.9, g_lr=1e-3, d_lr=2e-4)
 
 

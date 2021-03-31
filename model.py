@@ -149,7 +149,7 @@ class Mnist_ConvAE(Model):
 		self.z_conv = None
 		self.z_se = None
 		self.decoder = Sequential([
-			layers.Reshape((4, 4, 5)),
+			layers.Reshape((4, 4, 5), trainable=False),
 			layers.Conv2DTranspose(10, kernel_size=3,
 								   activation='relu',
 								   strides=2,
@@ -183,7 +183,7 @@ class Mnist_ConvAE(Model):
 		return x
 
 class DASC(object):
-	def __init__(self, model, input_shape, batch_size=1440, kcluster=20, alpha=0.8, r=30):
+	def __init__(self, model, input_shape, batch_size=1440, kcluster=20, r=30):
 		super(DASC, self).__init__()
 		self.kcluster = kcluster
 		self.batch_size = batch_size
@@ -192,17 +192,18 @@ class DASC(object):
 		self.conv_ae.build(input_shape=input_shape)
 		self._U = []	# 每个cluster对应的U Projection layer
 		self.u_matrix = []
-		self.alpha = alpha
+
 		self.r = r
 		# self._m = []	# 每个cluster的样本数，包含真假样本
 		# self._z = []
 
 	def call(self, x):
-		self.G(x, alpha=self.alpha)
-		real_z, fake_z = self.G(x, alpha=self.alpha)
-		self.D(real_z, fake_z, self.r)
+		# self.G(x, alpha=self.alpha)
+		# real_z, fake_z = self.G(x, alpha=self.alpha)
+		# self.D(real_z, fake_z, self.r)
+		pass
 
-	def initialize(self, train_data, pre_train_epoch=10, learning_rate=1e-3):
+	def initialize(self, train_data, pre_train_epoch=10, learning_rate=1e-3, lambda2=15, lambda3=1):
 		'''
 		pre-train generator G without considering D
 		:param x:
@@ -221,7 +222,7 @@ class DASC(object):
 					z_se = self.conv_ae.z_se
 					theta = self.conv_ae.layers[1].get_weights()[0]
 					# print(x_reconst.dtype, x_r_batch.dtype)
-					rec_loss, reconst_loss, self_expr_loss, penalty = loss.ae_loss(x_batch, x_reconst, z_conv, z_se, theta)
+					rec_loss, reconst_loss, self_expr_loss, penalty = loss.ae_loss(x_batch, x_reconst, z_conv, z_se, theta, lambda2=lambda2, lambda3=lambda3)
 				grads = tape.gradient(rec_loss, variables)
 				optimizer.apply_gradients(zip(grads, variables))
 
