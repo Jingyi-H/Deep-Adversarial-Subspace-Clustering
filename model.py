@@ -87,7 +87,8 @@ class ConvAE(Model):
 						  input_shape=input_shape[1:],
 						  strides=2,
 						  padding='SAME',
-						  kernel_initializer = tf.keras.initializers.GlorotNormal()),
+						  kernel_initializer = tf.keras.initializers.GlorotUniform(),
+						  kernel_regularizer=tf.keras.regularizers.l1()),
 			layers.Reshape((-1, 3840), trainable=False)
 		])
 
@@ -101,7 +102,8 @@ class ConvAE(Model):
 								   # input_shape=input_shape,
 								   strides=2,
 								   padding='SAME',
-								   kernel_initializer = tf.keras.initializers.GlorotNormal())
+								   kernel_initializer = tf.keras.initializers.GlorotUniform(),
+								   kernel_regularizer=tf.keras.regularizers.l1())
 		])
 
 	def call(self, x):
@@ -131,17 +133,17 @@ class Mnist_ConvAE(Model):
 						  input_shape=input_shape[1:],
 						  strides=2,
 						  padding='SAME',
-						  kernel_initializer = tf.keras.initializers.GlorotNormal()),
+						  kernel_initializer = tf.keras.initializers.GlorotUniform()),
 			layers.Conv2D(10, kernel_size=3,
 						  activation='relu',
 						  strides=2,
 						  padding='SAME',
-						  kernel_initializer = tf.keras.initializers.GlorotNormal()),
+						  kernel_initializer = tf.keras.initializers.GlorotUniform()),
 			layers.Conv2D(5, kernel_size=3,
 						  activation='relu',
 						  strides=2,
 						  padding='SAME',
-						  kernel_initializer = tf.keras.initializers.GlorotNormal()),
+						  kernel_initializer = tf.keras.initializers.GlorotUniform()),
 			layers.Reshape((-1, 80), trainable=False)
 		])
 
@@ -155,19 +157,19 @@ class Mnist_ConvAE(Model):
 								   strides=2,
 								   padding='SAME',
 								   output_padding=0,
-								   kernel_initializer = tf.keras.initializers.GlorotNormal()),
+								   kernel_initializer = tf.keras.initializers.GlorotUniform()),
 			layers.Conv2DTranspose(20, kernel_size=3,
 								   activation='relu',
 								   strides=2,
 								   padding='SAME',
 								   output_padding=1,
-								   kernel_initializer = tf.keras.initializers.GlorotNormal()),
+								   kernel_initializer = tf.keras.initializers.GlorotUniform()),
 			layers.Conv2DTranspose(1, kernel_size=5,
 								   activation='relu',
 								   strides=2,
 								   padding='SAME',
 								   output_padding=1,
-								   kernel_initializer = tf.keras.initializers.GlorotNormal())
+								   kernel_initializer = tf.keras.initializers.GlorotUniform())
 		])
 
 	def call(self, x):
@@ -229,6 +231,9 @@ class DASC(object):
 			print("Epoch[{}/{}]: loss={}\treconst_loss={}\tself_expr_loss={}\tpenalty={}".format(
 				str(epoch+1), str(pre_train_epoch), str(float(rec_loss)), str(reconst_loss.numpy()), str(self_expr_loss.numpy()), str(penalty.numpy().ravel()[0])))
 
+		if not os.path.exists('pretrain'):
+			os.makedirs('pretrain')
+		self.conv_ae.save_weights('pretrain/pre_conv_ae.h5')
 
 	def G(self, x, alpha=0.8):
 		'''
