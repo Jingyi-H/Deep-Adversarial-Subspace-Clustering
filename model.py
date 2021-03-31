@@ -96,7 +96,7 @@ class ConvAE(Model):
 		self.z_se = None
 		self.decoder = Sequential([
 			layers.Reshape((16, 16, 15), trainable=False),
-			layers.Conv2DTranspose(15, kernel_size=3,
+			layers.Conv2DTranspose(1, kernel_size=3,
 								   activation='relu',
 								   # input_shape=input_shape,
 								   strides=2,
@@ -117,9 +117,9 @@ class ConvAE(Model):
 
 		return x
 
-class Mnist_Conv_AE(Model):
-	def __init__(self, input_shape, batch_size, learning_rate):
-		super(Mnist_Conv_AE, self).__init__()
+class Mnist_ConvAE(Model):
+	def __init__(self, input_shape, batch_size, learning_rate=1e-3):
+		super(Mnist_ConvAE, self).__init__()
 
 		self.batch_size = batch_size
 		# self.input_img = layers.Input(shape=input_shape)
@@ -134,53 +134,50 @@ class Mnist_Conv_AE(Model):
 						  kernel_initializer = tf.keras.initializers.GlorotNormal()),
 			layers.Conv2D(10, kernel_size=3,
 						  activation='relu',
-						  input_shape=input_shape[1:],
 						  strides=2,
 						  padding='SAME',
 						  kernel_initializer = tf.keras.initializers.GlorotNormal()),
 			layers.Conv2D(5, kernel_size=3,
 						  activation='relu',
-						  input_shape=input_shape[1:],
 						  strides=2,
 						  padding='SAME',
 						  kernel_initializer = tf.keras.initializers.GlorotNormal()),
-			layers.Reshape((-1, 3840), trainable=False)
+			layers.Reshape((-1, 80), trainable=False)
 		])
 
 		self.self_expressive = Self_Expressive(self.batch_size, input_shape=(batch_size, batch_size))
 		self.z_conv = None
 		self.z_se = None
 		self.decoder = Sequential([
-			layers.Reshape((16, 16, 15)),
-			layers.Conv2DTranspose(15, kernel_size=3,
+			layers.Reshape((4, 4, 5)),
+			layers.Conv2DTranspose(10, kernel_size=3,
 								   activation='relu',
-								   # input_shape=input_shape,
 								   strides=2,
 								   padding='SAME',
+								   output_padding=0,
 								   kernel_initializer = tf.keras.initializers.GlorotNormal()),
-			layers.Conv2DTranspose(15, kernel_size=3,
+			layers.Conv2DTranspose(20, kernel_size=3,
 								   activation='relu',
-								   # input_shape=input_shape,
 								   strides=2,
 								   padding='SAME',
+								   output_padding=1,
 								   kernel_initializer = tf.keras.initializers.GlorotNormal()),
-			layers.Conv2DTranspose(15, kernel_size=3,
+			layers.Conv2DTranspose(1, kernel_size=5,
 								   activation='relu',
-								   # input_shape=input_shape,
 								   strides=2,
 								   padding='SAME',
+								   output_padding=1,
 								   kernel_initializer = tf.keras.initializers.GlorotNormal())
 		])
 
 	def call(self, x):
 		z = self.encoder(x)
-		z = tf.reshape(z, [self.batch_size, 3840])	# 整个batch一起训练
+		z = tf.reshape(z, [self.batch_size, -1])	# 整个batch一起训练
 		self.z_conv = z
-		# print(z)
 		z = self.self_expressive(z)
 		self.z_se = z									# self_expressive_z = theta*z
 		# print("z_se:", z.shape)
-		z = tf.reshape(z, [self.batch_size, 1, 3840])
+		z = tf.reshape(z, [self.batch_size, 1, -1])
 		x = self.decoder(z)
 
 		return x
@@ -299,24 +296,24 @@ class DASC(object):
 			u_k = 0
 			min_pr = 99999
 			index = np.arange(U_raw.shape[1])
-			for i in range(100):
-				np.random.shuffle(index)
-				U = tf.gather(U_raw, axis=1, indices=index[0:r])
-				# U = U[:, 0:r]
-				u = Projection(U, input_shape=real_z[k].shape, name="candidate_".format(str(k)))
-				u.build(real_z[k].shape)
-				# calculate projection residuals
-				proj = u(real_z[k])
-				l = tf.reduce_mean(loss.projection_residual(real_z[k], proj))
-				if l < min_pr:
-					min_pr = l
-					u_k = u
-				# print(idx_range)
-				# U = U[:, 0:r]
-				# # Lr_z = loss.projection_residual(_z, U)
-				# # print(U.shape)
-				# u_k = Projection(U, input_shape=z.shape, name="U{}".format(str(k)))
-				# u_k.build(z.shape)
+			# for i in range(10):
+			# 	np.random.shuffle(index)
+			# 	U = tf.gather(U_raw, axis=1, indices=index[0:r])
+			# 	# U = U[:, 0:r]
+			# 	u = Projection(U, input_shape=real_z[k].shape, name="candidate_".format(str(k)))
+			# 	u.build(real_z[k].shape)
+			# 	# calculate projection residuals
+			# 	proj = u(real_z[k])
+			# 	l = tf.reduce_mean(loss.projection_residual(real_z[k], proj))
+			# 	if l < min_pr:
+			# 		min_pr = l
+			# 		u_k = u
+
+			U = U_raw[:, 0:r]
+			# # Lr_z = loss.projection_residual(_z, U)
+			# # print(U.shape)
+			u_k = Projection(U, input_shape=real_z[k].shape, name="U{}".format(str(k)))
+			u_k.build(real_z[k].shape)
 
 			_U.append(u_k)
 
